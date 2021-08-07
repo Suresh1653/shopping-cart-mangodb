@@ -1,0 +1,167 @@
+# shopping-cart-mangodb
+shopping_cart
+var col = db.getSisterDB("shop").products;
+col.insert({
+  , _id: "111445GB3"
+  , name: "Simsong Mobile"
+  , description: "Awesome new 70G Phone"
+  , quantity: 99
+  , price: 1000
+});
+var col = db.getSisterDB("shop").products;
+col.insert({
+  , _id: "111445GB3"
+  , name: "Simsong Mobile"
+  , description: "Awesome new 70G Phone"
+  , quantity: 99
+  , price: 1000
+});
+add_cart
+var quantity = 1;
+var userId = 1;
+var productId = "111445GB3";
+
+var col = db.getSisterDB("shop").carts;
+col.update(
+    { _id: userId, status: 'active' }
+  , {
+      $set: { modified_on: new Date() }
+    , $push: { products: 
+        _id: productId
+      , quantity: quantity
+      , name: "Simsong Mobile"
+      , price: 1000
+    }}
+  }, true);
+var quantity = 1;
+var col = db.getSisterDB("shop").products;
+col.update({
+    _id: productId
+  , quantity: { $gte: quantity }
+}, {
+    $inc: { quantity: -quantity }
+  , $push: {
+    reserved: {
+      quantity: quantity, _id: userId, created_on: new Date()
+    }
+  }
+});
+update_cart
+var quantity = 1;
+var col = db.getSisterDB("shop").carts;
+col.update({
+  _id: userId
+}, {
+    $set: { modified_on: new Date() }
+  , $pull: { products: { _id: productId }}
+})
+adjust_cart
+var col = db.getSisterDB("shop").carts;
+var cart = db.findOne({
+    _id: userId
+  , "products._id": productId
+  , status: "active"});
+var oldQuantity = 0;
+
+for(var i = 0; i < cart.products.length; i++) {
+  if(cart.products[i]._id == productId) {
+    oldQuantity = cart.products[i].quantity;
+  }
+}
+
+var newQuantity = 2;
+var delta = newQuantity - oldQuantity;
+
+col.update({
+    _id: userId
+  , "products._id": productId
+  , status: "active"
+}, {
+$set: {
+      modified_on: new Date()
+    , "products.$.quantity": newQuantity
+
+}
+});
+  var col = db.getSisterDB("shop").products;
+col.update({
+    _id: productId
+  , "reserved._id": userId
+  , quantity: {
+    $gte: delta
+  }
+}, {
+  , $inc: { quantity: -delta }
+    $set: {
+      "reserved.$.quantity": newQuantity, modified_on: new Date()
+    }
+})
+rollback_cart
+var col = db.getSisterDB("shop").carts;
+col.update({
+    _id: userId
+  , "products._id": productId
+  , status: "active"
+}, {
+  $set: {
+      modified_on: new Date()
+    , "products.$.quantity": oldQuantity
+  }
+});
+expiring_cart
+var cutOffDate = new Date();
+cutOffDate.setMinutes(cutOffDate.getMinutes() - 30);
+
+var cartsvCol = db.getSisterDB("shop").carts;
+var productCol = db.getSisterDB("shop").products;
+
+var carts = cartsCol.find({ modified_on: { $lte: cutOffDate }});
+while(carts.hasNext()) {
+  var cart = carts.next();
+
+  for(var i = 0; i < cart.products.length; i++) {
+    var product = cart.products[i];
+
+    productCol.update({
+        _id: product._id
+      , "reserved._id": cart._id
+      , "reserved.quantity": product.quantity
+    }, {
+        $inc: { quantity: product.quantity }
+      , $pull: { reserved: { _id: cart._id }}
+    });
+  }
+cartsCol.update({
+    _id: cart._id
+  }, {
+    $set: { status: 'expired' }
+  });
+}
+checkout_cart
+var cartsCol = db.getSisterDB("shop").carts;
+var productCol = db.getSisterDB("shop").products;
+var orderCol = db.getSisterDB("shop").orders;
+
+var cart = cartsCol.findOne({ _id: userId })
+
+orderCol.insert({
+    created_on: new Date()
+  , shipping: {
+      name: "Joe Dow"
+    , address: "Some street 1, NY 11223"
+  }
+  , payment: { method: "visa", transaction_id: "2312213312XXXTD" }
+  , products: cart.products
+});
+
+cartsCol.update({
+  { _id: userId }
+}, {
+  $set: { status: 'complete' }
+});
+
+productCol.update({
+  "reserved._id": userId
+}, {
+  $pull: { reserved: {_id: userId }}
+}, false, true);
